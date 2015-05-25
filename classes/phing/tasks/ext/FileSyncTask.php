@@ -153,6 +153,12 @@ class FileSyncTask extends Task
     protected $sshPort;
 
     /**
+     * Comma separated list of the exclude patterns 
+     * @var string
+     */
+    protected $excludeList = '';
+
+    /**
      * Phing's main method. Wraps the executeCommand() method.
      *
      * @return void
@@ -267,7 +273,12 @@ class FileSyncTask extends Task
             $options .= ' -b --backup-dir=' . $this->backupDir;
         }
 
-        if ($this->excludeFile !== null) {
+        if ($this->excludeList != '') {
+            /* Parse exclude list and insert into command */
+            $options .= ' ' . $this->excludeList;
+        }
+
+        if ($this->excludeFile !== null && $this->excludeList == '') {
             $options .= ' --exclude-from=' . $this->excludeFile;
         }
         $this->setOptions($options);
@@ -505,5 +516,38 @@ class FileSyncTask extends Task
     public function setSshPort($port)
     {
         $this->sshPort = $port;
+    }
+
+
+    /**
+     * Sets a comma separated list of the exclude patterns
+     *
+     * @param string $list
+     */
+    public function setExcludeList($list)
+    {
+        $list = trim($list);
+        $this->excludeList = $this->parseExcludeList($list);
+    }
+
+  /**
+    * Converts comma separated list of the exclude patterns into rsync arguments
+    *
+    * @param string $list
+    * @return string
+    */
+    protected function parseExcludeList($list)
+    {
+        $patternsArg = '';
+        if (strlen($list) > 0) {
+            $excludePatterns = explode(',', $list);
+
+            foreach ($excludePatterns as $pattern) {
+                $pattern = trim($pattern);
+                $patternsArg .= "--exclude='$pattern' ";
+            }
+        }
+
+        return $patternsArg;
     }
 }
