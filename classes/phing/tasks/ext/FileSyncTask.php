@@ -1,4 +1,4 @@
-<?php
+ <?php
 /*
  * $Id$
  *
@@ -18,9 +18,7 @@
  * and is licensed under the LGPL. For more information please see
  * <http://phing.info>.
  */
-
 require_once "phing/Task.php";
-
 /**
  * The FileSyncTask class copies files either to or from a remote host, or locally
  * on the current host. It allows rsync to transfer the differences between two
@@ -50,7 +48,7 @@ class FileSyncTask extends Task
     /**
      * Path to rsync command.
      * @var string
-     */
+    */
     protected $rsyncPath = '/usr/bin/rsync';
 
     /**
@@ -59,50 +57,37 @@ class FileSyncTask extends Task
      * @var string
      */
     protected $sourceDir;
-
     /**
      * Destination directory.
      * For remote targets this must contain user and host, e.g.: user@host:/my/target/dir
      * @var string
      */
     protected $destinationDir;
-
     /**
      * Remote host.
      * @var string
      */
     protected $remoteHost;
-
     /**
      * Rsync auth username.
      * @var string
      */
     protected $remoteUser;
-
     /**
      * Rsync auth password.
      * @var string
      */
     protected $remotePass;
-
     /**
      * Remote shell.
      * @var string
      */
     protected $remoteShell;
-
-    /**
-     * Exclude file matching pattern.
-     * @var string
-     */
-    protected $exclude;
-
     /**
      * Excluded patterns file.
      * @var string
      */
     protected $excludeFile;
-
     /**
      * This option creates a backup so users can rollback to an existing restore
      * point. The remote directory is copied to a new directory specified by the
@@ -110,7 +95,6 @@ class FileSyncTask extends Task
      * @var string
      */
     protected $backupDir;
-
     /**
      * Default command options.
      * r - recursive
@@ -120,14 +104,13 @@ class FileSyncTask extends Task
      * l - copy symlinks as symlinks
      * @var string
      */
-    protected $defaultOptions = '-rpKzl';
-
+    //protected $defaultOptions = '-rpKzl';
+    protected $defaultOptions = '-rKzl';
     /**
      * Connection type.
      * @var boolean
      */
     protected $isRemoteConnection = false;
-
     /**
      * This option increases the amount of information you are given during the
      * transfer. The verbose option set to true will give you information about
@@ -135,38 +118,39 @@ class FileSyncTask extends Task
      * @var boolean
      */
     protected $verbose = true;
-
     /**
      * This option makes rsync perform a trial run that doesn’t make any changes
      * (and produces mostly the same output as a real run).
      * @var boolean
      */
     protected $dryRun = false;
-
     /**
      * This option makes requests a simple itemized list of the changes that are
      * being made to each file, including attribute changes.
      * @var boolean
      */
     protected $itemizeChanges = false;
-
     /**
      * This option will cause rsync to skip files based on checksum, not mod-time & size.
      * @var boolean
      */
     protected $checksum = false;
-
     /**
      * This option deletes files that don't exist on sender.
      * @var boolean
      */
     protected $delete = false;
-
     /**
      * Identity file.
      * @var string
      */
     protected $identityFile;
+
+     /**
+     * Alternate remote SSH Port. (default is 22)
+     * @var string
+     */
+    protected $sshPort;
 
     /**
      * Phing's main method. Wraps the executeCommand() method.
@@ -177,11 +161,10 @@ class FileSyncTask extends Task
     {
         $this->executeCommand();
     }
-
     /**
      * Executes the rsync command and returns the exit code.
      *
-     * @return int            Return code from execution.
+     * @return int Return code from execution.
      * @throws BuildException
      */
     public function executeCommand()
@@ -192,60 +175,50 @@ class FileSyncTask extends Task
 
         if ($this->sourceDir === null) {
             throw new BuildException('The "sourcedir" attribute is missing or undefined.');
+        } else if ($this->destinationDir === null) {
+            throw new BuildException('The "destinationdir" attribute is missing or undefined.');
+        }
+        if (strpos($this->destinationDir, '@')) {
+            $this->setIsRemoteConnection(true);
         } else {
-            if ($this->destinationDir === null) {
-                throw new BuildException('The "destinationdir" attribute is missing or undefined.');
+            if (! (is_dir($this->destinationDir) && is_readable($this->destinationDir))) {
+                throw new BuildException("No such file or directory: " . $this->destinationDir);
             }
         }
-
-        if (strpos($this->destinationDir, ':')) {
-            $this->setIsRemoteConnection(true);
-        }
-
-        if (strpos($this->sourceDir, ':')) {
+        if (strpos($this->sourceDir, '@')) {
             if ($this->isRemoteConnection) {
                 throw new BuildException('The source and destination cannot both be remote.');
             }
             $this->setIsRemoteConnection(true);
         } else {
-            if (!(is_dir($this->sourceDir) && is_readable($this->sourceDir))) {
+            if (! (is_dir($this->sourceDir) && is_readable($this->sourceDir))) {
                 throw new BuildException('No such file or directory: ' . $this->sourceDir);
             }
         }
-
         if ($this->backupDir !== null && $this->backupDir == $this->destinationDir) {
             throw new BuildException("Invalid backup directory: " . $this->backupDir);
         }
-
         $command = $this->getCommand();
-
         $output = array();
         $return = null;
         exec($command, $output, $return);
-
         $lines = '';
         foreach ($output as $line) {
             if (!empty($line)) {
                 $lines .= "\r\n" . "\t\t\t" . $line;
             }
         }
-
         $this->log($command);
 
         if ($return != 0) {
             $this->log('Task exited with code: ' . $return, Project::MSG_ERR);
-            $this->log(
-                'Task exited with message: (' . $return . ') ' . $this->getErrorMessage($return),
-                Project::MSG_ERR
-            );
+            $this->log('Task exited with message: (' . $return . ') ' . $this->getErrorMessage($return), Project::MSG_ERR);
             throw new BuildException($return . ': ' . $this->getErrorMessage($return));
         } else {
             $this->log($lines, Project::MSG_INFO);
         }
-
         return $return;
     }
-
     /**
      * Returns the rsync command line options.
      *
@@ -260,19 +233,23 @@ class FileSyncTask extends Task
         }
 
         if ($this->verbose === true) {
-            $options .= ' --verbose';
+            $options .= 'v';
         }
 
         if ($this->checksum === true) {
-            $options .= ' --checksum';
+            $options .= 'c';
         }
 
         if ($this->identityFile !== null) {
-            $options .= ' -e "ssh -i ' . $this->identityFile . '"';
+            $options .= ' -e "ssh -i '. $this->identityFile . '"';
         } else {
             if ($this->remoteShell !== null) {
                 $options .= ' -e "' . $this->remoteShell . '"';
             }
+        }
+
+        if (!empty($this->sshPort)) {
+            $options .= ' -e "ssh -p ' . $this->sshPort . '"';
         }
 
         if ($this->dryRun === true) {
@@ -287,43 +264,34 @@ class FileSyncTask extends Task
             $options .= ' --itemize-changes';
         }
         if ($this->backupDir !== null) {
-            $options .= ' -b --backup-dir="' . $this->backupDir . '"';
-        }
-
-        if ($this->exclude !== null) {
-            $options .= ' --exclude="' . $this->exclude . '"';
+            $options .= ' -b --backup-dir=' . $this->backupDir;
         }
 
         if ($this->excludeFile !== null) {
-            $options .= ' --exclude-from="' . $this->excludeFile . '"';
+            $options .= ' --exclude-from=' . $this->excludeFile;
         }
-
         $this->setOptions($options);
-
-        $options .= ' "' . $this->sourceDir . '" "' . $this->destinationDir . '"';
-
+        $options .= ' ' . $this->sourceDir . ' ' . $this->destinationDir;
         escapeshellcmd($options);
         $options .= ' 2>&1';
-
         return $this->rsyncPath . ' ' . $options;
     }
-
     /**
      * Returns an error message based on a given error code.
      *
-     * @param  int         $code Error code
+     * @param int $code Error code
      * @return null|string
      */
     public function getErrorMessage($code)
     {
-        $error[0] = 'Success';
-        $error[1] = 'Syntax or usage error';
-        $error[2] = 'Protocol incompatibility';
-        $error[3] = 'Errors selecting input/output files, dirs';
-        $error[4] = 'Requested action not supported: an attempt was made to manipulate '
-            . '64-bit files on a platform that cannot support them; or an option '
-            . 'was specified that is supported by the client and not by the server';
-        $error[5] = 'Error starting client-server protocol';
+        $error[0]  = 'Success';
+        $error[1]  = 'Syntax or usage error';
+        $error[2]  = 'Protocol incompatibility';
+        $error[3]  = 'Errors selecting input/output files, dirs';
+        $error[4]  = 'Requested action not supported: an attempt was made to manipulate '
+                   . '64-bit files on a platform that cannot support them; or an option '
+                   . 'was specified that is supported by the client and not by the server';
+        $error[5]  = 'Error starting client-server protocol';
         $error[10] = 'Error in socket I/O';
         $error[11] = 'Error in file I/O';
         $error[12] = 'Error in rsync protocol data stream';
@@ -335,197 +303,179 @@ class FileSyncTask extends Task
         $error[23] = 'Partial transfer due to error';
         $error[24] = 'Partial transfer due to vanished source files';
         $error[30] = 'Timeout in data send/receive';
-
         if (array_key_exists($code, $error)) {
             return $error[$code];
         }
-
         return null;
     }
-
     /**
      * Sets the path to the rsync command.
      *
-     * @param  string $path
+     * @param string $path
      * @return void
      */
     public function setRsyncPath($path)
     {
         $this->rsyncPath = $path;
     }
-
     /**
      * Sets the isRemoteConnection property.
      *
-     * @param  boolean $isRemote
+     * @param boolean $isRemote
      * @return void
      */
     protected function setIsRemoteConnection($isRemote)
     {
         $this->isRemoteConnection = $isRemote;
     }
-
     /**
      * Sets the source directory.
      *
-     * @param  string $dir
+     * @param string $dir
      * @return void
      */
     public function setSourceDir($dir)
     {
         $this->sourceDir = $dir;
     }
-
     /**
      * Sets the command options.
      *
-     * @param  string $options
+     * @param string $options
      * @return void
      */
     public function setOptions($options)
     {
         $this->options = $options;
     }
-
     /**
      * Sets the destination directory. If the option remotehost is not included
      * in the build.xml file, rsync will point to a local directory instead.
      *
-     * @param  string $dir
+     * @param string $dir
      * @return void
      */
     public function setDestinationDir($dir)
     {
         $this->destinationDir = $dir;
     }
-
     /**
      * Sets the remote host.
      *
-     * @param  string $host
+     * @param string $host
      * @return void
      */
     public function setRemoteHost($host)
     {
         $this->remoteHost = $host;
     }
-
     /**
      * Specifies the user to log in as on the remote machine. This also may be
      * specified in the properties file.
      *
-     * @param  string $user
+     * @param string $user
      * @return void
      */
     public function setRemoteUser($user)
     {
         $this->remoteUser = $user;
     }
-
     /**
      * This option allows you to provide a password for accessing a remote rsync
      * daemon. Note that this option is only useful when accessing an rsync daemon
      * using the built in transport, not when using a remote shell as the transport.
      *
-     * @param  string $pass
+     * @param string $pass
      * @return void
      */
     public function setRemotePass($pass)
     {
         $this->remotePass = $pass;
     }
-
     /**
      * Allows the user to choose an alternative remote shell program to use for
      * communication between the local and remote copies of rsync. Typically,
      * rsync is configured to use ssh by default, but you may prefer to use rsh
      * on a local network.
      *
-     * @param  string $shell
+     * @param string $shell
      * @return void
      */
     public function setRemoteShell($shell)
     {
         $this->remoteShell = $shell;
     }
-
     /**
      * Increases the amount of information you are given during the
      * transfer. By default, rsync works silently. A single -v will give you
      * information about what files are being transferred and a brief summary at
      * the end.
      *
-     * @param  boolean $verbose
+     * @param boolean $verbose
      * @return void
      */
     public function setVerbose($verbose)
     {
         $this->verbose = (bool) $verbose;
     }
-
     /**
      * This changes the way rsync checks if the files have been changed and are in need of a transfer.
      * Without this option, rsync  uses  a "quick  check"  that  (by  default)  checks if each file’s
      * size and time of last modification match between the sender and receiver.
      * This option changes this to compare a 128-bit checksum for each file that has a matching size.
      *
-     * @param  boolean $checksum
+     * @param boolean $checksum
      * @return void
      */
     public function setChecksum($checksum)
     {
         $this->checksum = (bool) $checksum;
     }
-
     /**
      * This makes rsync perform a trial run that doesn’t make any changes (and produces mostly the same
      * output as a real run).  It is  most commonly used in combination with the -v, --verbose and/or
      * -i, --itemize-changes options to see what an rsync command is going to do before one actually runs it.
      *
-     * @param  boolean $dryRun
+     * @param boolean $dryRun
      * @return void
      */
     public function setDryRun($dryRun)
     {
         $this->dryRun = (bool) $dryRun;
     }
-
     /**
      * Requests a simple itemized list of the changes that are being made to each file, including attribute changes.
      *
-     * @param  boolean $itemizeChanges
+     * @param boolean $dryRun
      * @return void
      */
     public function setItemizeChanges($itemizeChanges)
     {
         $this->itemizeChanges = (bool) $itemizeChanges;
     }
-
     /**
      * Tells rsync to delete extraneous files from the receiving side, but only
      * for the directories that are being synchronized. Files that are excluded
      * from transfer are also excluded from being deleted.
      *
-     * @param  boolean $delete
+     * @param boolean $delete
      * @return void
      */
     public function setDelete($delete)
     {
         $this->delete = (bool) $delete;
     }
-
     /**
      * Exclude files matching patterns from $file, Blank lines in $file and
      * lines starting with ';' or '#' are ignored.
      *
-     * @param  string $file
+     * @param string $file
      * @return void
      */
     public function setExcludeFile($file)
     {
         $this->excludeFile = $file;
     }
-
     /**
      * Makes backups into hierarchy based in $dir.
      *
@@ -536,7 +486,6 @@ class FileSyncTask extends Task
     {
         $this->backupDir = $dir;
     }
-
     /**
      * Sets the identity file for public key transfers.
      *
@@ -548,14 +497,13 @@ class FileSyncTask extends Task
         $this->identityFile = $identity;
     }
 
-    /**
-     * Sets exclude matching pattern.
+   /**
+     * Set the remote SSH port
      *
-     * @param string $exclude
-     * @return void
+     * @param string $port alternate port for remote ssh
      */
-    public function setExclude($exclude)
+    public function setSshPort($port)
     {
-        $this->exclude = $exclude;
+        $this->sshPort = $port;
     }
 }
