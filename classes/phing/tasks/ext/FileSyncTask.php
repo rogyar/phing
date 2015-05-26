@@ -269,7 +269,7 @@ class FileSyncTask extends Task
         if ($this->itemizeChanges === true) {
             $options .= ' --itemize-changes';
         }
-        if ($this->backupDir !== null) {
+        if (!empty($this->backupDir)) {
             $options .= ' -b --backup-dir=' . $this->backupDir;
         }
 
